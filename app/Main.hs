@@ -3,136 +3,115 @@ module Main where
 import Types as T
 import Check as Ch
 import Prims as P
+import Constraint as C
+import System.IO (hFlush, stdout)
 
 -- | Run all tests and print results.
 main :: IO ()
 main = do
     putStrLn "=== Base Kind Tests ===\n"
-    testKTypeTInt
-    testKTypeTBool
-    testKTypeTUnit
-    testKArrow
-    testLambdaAnn
-    testTRecCons
+    checkConstraint "testKTypeTInt" testKTypeTInt
+    checkConstraint "testKTypeTBool" testKTypeTBool
+    checkConstraint "testKTypeTUnit" testKTypeTUnit
+    checkConstraint "testKArrow" testKArrow
+    checkConstraint "testLambdaAnn" testLambdaAnn
+    checkConstraint "testTRecCons" testTRecCons
     putStrLn "\n=== Lambda Tests ===\n"
-    testLambdaInt
-    testLambdaBool
-    testLambdaUnit
-    testLambdaArrow
-    testLambdaTRecCons
+    checkConstraint "testLambdaInt" testLambdaInt
+    checkConstraint "testLambdaBool" testLambdaBool
+    checkConstraint "testLambdaUnit" testLambdaUnit
+    checkConstraint "testLambdaArrow" testLambdaArrow
+    checkConstraint "testLambdaTRecCons" testLambdaTRecCons
     putStrLn "\n=== All tests completed ==="
 
 -- ---------------------------------------------------------------------------
--- Test infrastructure
+-- SMT validity checking helper
+-- ---------------------------------------------------------------------------
+
+checkConstraint :: String -> IO C.Cstr -> IO ()
+checkConstraint name test = do
+    putStr $ "  " ++ name ++ "... "
+    hFlush stdout
+    cstr <- test
+    let smtFile = name ++ ".cvc4"
+    C.dumpToSmt smtFile cstr
+    output <- C.runcvc4 smtFile
+    putStrLn $ "CVC4 output: " ++ take 80 output ++ "..."
+    {- let isSat = "INVALID" `elem` words output
+        isValid = "VALID" `elem` words output
+    if isValid
+        then putStrLn "VALID"
+        else if isSat
+            then putStrLn "INVALID (counterexample found)"
+            else putStrLn $ take 80 output ++ "..."
+ -}
+-- ---------------------------------------------------------------------------
+-- Test generators (each returns the constraint for SMT checking)
 -- ---------------------------------------------------------------------------
 
 -- TInt
-testKTypeTInt :: IO ()
+testKTypeTInt :: IO C.Cstr
 testKTypeTInt = do
-    putStrLn "Running testKTypeTInt..."
     let typeExpr = T.TBase T.TInt
-    putStrLn $ "Test KType: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test KType: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testKTypeTBool :: IO ()
+testKTypeTBool :: IO C.Cstr
 testKTypeTBool = do
-    putStrLn "Running testKTypeTBool..."
     let typeExpr = T.TBase T.TBool
-    putStrLn $ "Test KType: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test KType: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testKTypeTUnit :: IO ()
+testKTypeTUnit :: IO C.Cstr
 testKTypeTUnit = do
-    putStrLn "Running testKTypeTUnit..."
     let typeExpr = T.TBase T.TUnit
-    putStrLn $ "Test KType: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test KType: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testKArrow :: IO ()
+testKArrow :: IO C.Cstr
 testKArrow = do
-    putStrLn "Running testKArrow..."
     let typeExpr = T.TBase (T.Arrow T.TInt T.TBool)
-    putStrLn $ "Test KArrow: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test KArrow: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
 
-testLambdaAnn :: IO ()
+testLambdaAnn :: IO C.Cstr
 testLambdaAnn = do
-        putStrLn "Running testLambdaAnn..."
-        let argKind = T.KBase T.BKType (T.Refinement ("v", P.typereft T.BEq (T.Pvar "v") (T.PTBaseTypes T.TUnit)))
+        let argKind = P.constKind T.TUnit
             typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
-        putStrLn $ "Test LambdaAnn: " ++ show typeExpr
-        let cstr = Ch.vcgen typeExpr
-        putStrLn $ "Test LambdaAnn: " ++ show cstr
-        putStrLn $ "Expected: CAnd []"
+        pure $ Ch.vcgen typeExpr
 
-testTRecCons :: IO ()
+testTRecCons :: IO C.Cstr
 testTRecCons = do
-    putStrLn "Running testTRecCons..."
     let typeExpr = T.TBase (T.TRecCons (T.TLabel "label") (T.TInt) (T.TRecNil))
-    putStrLn $ "Test TRecCons: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test TRecCons: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
 -- ---------------------------------------------------------------------------
 -- Lambda tests for each base type
 -- ---------------------------------------------------------------------------
 
-testLambdaInt :: IO ()
+testLambdaInt :: IO C.Cstr
 testLambdaInt = do
-    putStrLn "Running testLambdaInt..."
-    let argKind = T.KBase T.BKType (T.Refinement ("v", T.PTBaseTypes T.TInt))
+    let argKind = P.constKind T.TInt
         typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
-    putStrLn $ "Test LambdaInt: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test LambdaInt: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testLambdaBool :: IO ()
+testLambdaBool :: IO C.Cstr
 testLambdaBool = do
-    putStrLn "Running testLambdaBool..."
-    let argKind = T.KBase T.BKType (T.Refinement ("v", T.PTBaseTypes T.TBool))
+    let argKind = P.constKind T.TBool
         typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
-    putStrLn $ "Test LambdaBool: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test LambdaBool: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testLambdaUnit :: IO ()
+testLambdaUnit :: IO C.Cstr
 testLambdaUnit = do
-    putStrLn "Running testLambdaUnit..."
-    let argKind = T.KBase T.BKType (T.Refinement ("v", T.PTBaseTypes T.TUnit))
+    let argKind = P.constKind T.TUnit
         typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
-    putStrLn $ "Test LambdaUnit: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test LambdaUnit: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testLambdaArrow :: IO ()
+testLambdaArrow :: IO C.Cstr
 testLambdaArrow = do
-    putStrLn "Running testLambdaArrow..."
-    let argKind = T.KBase T.BKType (T.Refinement ("v", T.PTBaseTypes (T.Arrow T.TInt T.TBool)))
+    let argKind = P.constKind (T.Arrow T.TInt T.TBool)
         typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
-    putStrLn $ "Test LambdaArrow: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test LambdaArrow: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
 
-testLambdaTRecCons :: IO ()
+testLambdaTRecCons :: IO C.Cstr
 testLambdaTRecCons = do
-    putStrLn "Running testLambdaTRecCons..."
-    let argKind = T.KBase T.BKRec (T.Refinement ("v", T.PTBaseTypes (T.TRecCons (T.TLabel "label") T.TInt T.TRecNil)))
+    let argKind = P.constKind (T.TRecCons (T.TLabel "label") T.TInt T.TRecNil)
         typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
-    putStrLn $ "Test LambdaTRecCons: " ++ show typeExpr
-    let cstr = Ch.vcgen typeExpr
-    putStrLn $ "Test LambdaTRecCons: " ++ show cstr
-    putStrLn $ "Expected: CAnd []"
+    pure $ Ch.vcgen typeExpr
