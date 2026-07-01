@@ -12,7 +12,7 @@ data Pred = PTrue
             | PFalse
             | Pvar Identifier
             | PInterp TypeOp Pred Pred
-            | PTBaseTypes BaseTypes -- TODO change to types later?
+            | PType Type   -- any Type, not just BaseTypes
             | PLab BaseTypes        -- lab() for record label sets
             | PArrow Pred Pred
             | PAnd Pred Pred
@@ -22,13 +22,18 @@ data Pred = PTrue
 --            | PUniterp Identifier [Pred] -- ???
              deriving (Eq, Show)
 
-data BaseKind = BKType | BKRec | BKFun | BKLabel
-  deriving (Eq, Show)
-
+-- | Kind, BaseKind, and Refinement are mutually recursive:
+--   Kind  ─KBase→  BaseKind
+--   BaseKind ─BKGen→  Kind Refinement
+--   Kind Refinement holds a Refinement in KBase.
+--   Haskell allows mutual recursion among data/newtype declarations.
 data Kind r 
   = KBase BaseKind r
   | KPi (Identifier, Kind r) (Kind r)
   deriving (Show, Eq)
+
+data BaseKind = BKType | BKRec | BKFun | BKLabel | BKRef | BKCol | BKGen (Kind Refinement)
+  deriving (Eq, Show)
 
 newtype Refinement = Refinement (Identifier, Pred)
   deriving (Eq, Show)
@@ -54,6 +59,7 @@ data Type
   = TBase BaseTypes
     | TVar Identifier
     | TLambda LetBind Type
+    | TForall LetBind Rkind Type   -- ∀x:k. body
     | TApp Type Type
     | TAnn Type Rkind
   deriving (Eq, Show)
@@ -71,7 +77,7 @@ lookupEnv x ((y, v):ys)
 substPred :: Pred -> Identifier -> Identifier -> Pred
 substPred PTrue _ _ = PTrue
 substPred PFalse _ _ = PFalse
-substPred (PTBaseTypes b) _ _ = PTBaseTypes b
+substPred (PType t) _ _ = PType t
 substPred (Pvar v) x z
     | v == x    = Pvar z
     | otherwise = Pvar v
@@ -94,15 +100,14 @@ substKind (KPi (v, k1) k2) x z
 
 -- TODO check if this is correct. slop
 
--- | Substitute a Type for an Identifier in a Pred, converting concrete
---   base types to PTBaseTypes so the CVC4 output is correct.
+-- | Substitute a Type for an Identifier in a Pred, wrapping it in PType.
 substPredType :: Pred -> Identifier -> Type -> Pred
 substPredType PTrue _ _ = PTrue
 substPredType PFalse _ _ = PFalse
-substPredType (PTBaseTypes b) _ _ = PTBaseTypes b
+substPredType (PType t) _ _ = PType t
 substPredType (PLab b) _ _ = PLab b
 substPredType (Pvar v) x (TBase bt)
-    | v == x    = PTBaseTypes bt
+    | v == x    = PType (TBase bt)
     | otherwise = Pvar v
 substPredType (Pvar v) _ _ = Pvar v   -- non-TBase (e.g. TVar) stays as-is
 substPredType (PArrow p1 p2) x t = PArrow (substPredType p1 x t) (substPredType p2 x t)

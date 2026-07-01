@@ -106,7 +106,7 @@ constraintToCVC4 (Constraint.CAll (Constraint.Bind v k p) c) =
 predToCVC4 :: T.Pred -> String
 predToCVC4 T.PTrue = "TRUE"
 predToCVC4 T.PFalse = "FALSE"
-predToCVC4 (T.PTBaseTypes b) = baseTypeToCVC4 b
+predToCVC4 (T.PType t) = typeToCVC4 t
 predToCVC4 (T.PLab b) = "lab(" ++ baseTypeToCVC4 b ++ ")"
 predToCVC4 (T.Pvar v) = v
 predToCVC4 (T.PArrow p1 p2) = "(" ++ predToCVC4 p1 ++ " => " ++ predToCVC4 p2 ++ ")"
@@ -131,12 +131,22 @@ baseTypeToCVC4 (T.TLabel l) = "\"" ++ l ++ "\""
 baseTypeToCVC4 (T.PBIn _) = error "baseTypeToCVC4: PBIn not expected as a base type"
 baseTypeToCVC4 (T.TRecCons l t1 t2) = "cons(" ++ show (T.baseTypetoIdentifier l) ++ ", " ++ baseTypeToCVC4 t1 ++ ", " ++ baseTypeToCVC4 t2 ++ ")"   -- non-label first field
 
+typeToCVC4 :: T.Type -> String
+typeToCVC4 (T.TBase bt) = baseTypeToCVC4 bt
+typeToCVC4 (T.TVar x) = x
+typeToCVC4 (T.TApp t1 t2) = "appTyp(" ++ typeToCVC4 t1 ++ ", " ++ typeToCVC4 t2 ++ ")"
+typeToCVC4 (T.TLambda _ _) = "FunType(Num, Num)"
+typeToCVC4 (T.TForall _ _ _) = "PolyType(Num)"   -- forall as PolyType
+typeToCVC4 (T.TAnn t _) = typeToCVC4 t
+
 
 kindToCVC4 :: T.BaseKind -> String
 kindToCVC4 T.BKType = "Typ"
 kindToCVC4 T.BKRec = "Typ"
 kindToCVC4 T.BKFun = "Typ"
 kindToCVC4 T.BKLabel = "STRING"
+kindToCVC4 (T.BKGen _) = "Typ"
+kindToCVC4 _ = error "kindToCVC4: unsupported base kind"
 
 typeOpToCVC4 :: T.TypeOp -> String
 typeOpToCVC4 T.BEq = "="

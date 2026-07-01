@@ -53,6 +53,8 @@ main = do
     putStrLn "\n=== Record Emptiness Tests ===\n"
     checkConstraint "testRecIsEmpty" testRecIsEmpty
     checkConstraint "testRecIsNotEmpty" testRecIsNotEmpty
+    putStrLn "\n=== Forall Tests ===\n"
+    checkConstraint "testForall" testForall
     putStrLn "\n=== All tests completed ==="
 
 -- ---------------------------------------------------------------------------
@@ -165,7 +167,7 @@ testRecBMember :: IO C.Cstr
 testRecBMember = do
     let rec = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
         kind = T.KBase T.BKRec (T.Refinement ("v",
-            T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "x")) (T.PLab rec)))
+            T.PInterp T.BMember (T.PType (T.TBase (T.TLabel "x"))) (T.PLab rec)))
         typeExpr = T.TAnn (T.TBase rec) kind
     pure $ Ch.vcgen typeExpr
 
@@ -175,7 +177,7 @@ testLambdaBMember :: IO C.Cstr
 testLambdaBMember = do
     let rec = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
         argKind = T.KBase T.BKRec (T.Refinement ("v",
-            T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "x")) (T.PLab rec)))
+            T.PInterp T.BMember (T.PType (T.TBase (T.TLabel "x"))) (T.PLab rec)))
         typeExpr = T.TAnn (T.TLambda (T.LetBind "r") (T.TVar "r"))
                     (T.KPi ("r", argKind) argKind)
     pure $ Ch.vcgen typeExpr
@@ -214,8 +216,8 @@ testRecMultiBMember :: IO C.Cstr
 testRecMultiBMember = do
     let rec = T.TRecCons (T.TLabel "x") T.TInt
                 (T.TRecCons (T.TLabel "y") T.TBool T.TRecNil)
-        p1 = T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "x")) (T.PLab rec)
-        p2 = T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "y")) (T.PLab rec)
+        p1 = T.PInterp T.BMember (T.PType (T.TBase (T.TLabel "x"))) (T.PLab rec)
+        p2 = T.PInterp T.BMember (T.PType (T.TBase (T.TLabel "y"))) (T.PLab rec)
         kind = T.KBase T.BKRec (T.Refinement ("v",
             T.PAnd p1 p2))
         typeExpr = T.TAnn (T.TBase rec) kind
@@ -242,7 +244,7 @@ testRecMultiBApart = do
 testSimpleRecEqSelf :: IO C.Cstr
 testSimpleRecEqSelf = do
     let rec      = T.TRecCons (T.TLabel "lbl") T.TInt T.TRecNil
-        ref      = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PTBaseTypes rec))
+        ref      = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PType (T.TBase rec)))
         kind     = T.KBase T.BKRec ref
         typeExpr = T.TAnn (T.TBase rec) kind
     pure $ Ch.vcgen typeExpr
@@ -279,7 +281,7 @@ testRecRefinedAsBKType = do
     let rec      = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
         -- target kind: {v:Typ | v = {x: Int}}   (BKType with a refinement)
         targetKind = T.KBase T.BKType (T.Refinement ("v",
-            T.PInterp T.BEq (T.Pvar "v") (T.PTBaseTypes rec)))
+            T.PInterp T.BEq (T.Pvar "v") (T.PType (T.TBase rec))))
         typeExpr = T.TAnn (T.TBase rec) targetKind
     pure $ Ch.vcgen typeExpr
 
@@ -443,4 +445,20 @@ testRecIsNotEmpty = do
         kind = T.KBase T.BKType (T.Refinement ("v",
                 T.PNot (T.PEmpty (T.Pvar "v"))))
         typeExpr = T.TAnn (T.TBase rec) kind
+    pure $ Ch.vcgen typeExpr
+
+-- ---------------------------------------------------------------------------
+-- Forall tests — universal quantification at the type level
+-- ---------------------------------------------------------------------------
+
+-- | ∀a : BKType. a   annotated with KBase (BKGen BKType) {v = PolyType(Num)}.
+--   Uses PolyType in the kind's refinement (no CVC4 FORALL for the binder).
+testForall :: IO C.Cstr
+testForall = do
+    let varKind = P.bTrue T.BKType
+        forallType = T.TForall (T.LetBind "a") varKind (T.TVar "a")
+        forallPred = T.PInterp T.BEq (T.Pvar "v")
+            (T.PType (T.TForall (T.LetBind "a") varKind (T.TVar "a")))
+        forallKind = T.KBase (T.BKGen varKind) (T.Refinement ("v", forallPred))
+        typeExpr = T.TAnn forallType forallKind
     pure $ Ch.vcgen typeExpr

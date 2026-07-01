@@ -26,6 +26,15 @@ synth env (T.TApp e y) = case synth env e of
 synth env (T.TAnn t k) = (c, k)
     where c = check env t k
 
+synth env (T.TForall (T.LetBind x) k body) =
+    let env' = (x, k) : env
+        (c, _) = synth env' body
+        -- Represent TForall as PolyType in the kind, not as a CVC4 FORALL.
+        forallPred = T.PInterp T.BEq (T.Pvar "v")
+            (T.PType (T.TForall (T.LetBind x) k body))
+        resultKind = T.KBase (T.BKGen k) (T.Refinement ("v", forallPred))
+    in (c, resultKind)
+
 synth _ e = error $ "synth: not implemented for: " ++ show e
 
 
@@ -62,8 +71,12 @@ implicationConstraint x k c = case k of
 --   Any value of a more specific base kind can be used where BKType is expected.
 sub :: T.Rkind -> T.Rkind -> C.Cstr
 sub (T.KBase b1 (T.Refinement (v1, p1))) (T.KBase b2 (T.Refinement (v2, p2)))
-    | b1 == b2 || b2 == T.BKType = C.CAll (C.Bind v1 b1 p1) (C.CPred (T.substPred p2 v2 v1))
-    | otherwise = error "sub: base kinds do not match"
+    | b1 == b2 || b2 == T.BKType || isSubKind b1 b2 = C.CAll (C.Bind v1 b1 p1) (C.CPred (T.substPred p2 v2 v1))
+    | otherwise = error $ "sub: base kinds do not match: " ++ show b1 ++ " vs " ++ show b2
+    where
+        -- | BKGen matches BKGen (any parameter).
+        isSubKind T.BKGen{} T.BKGen{} = True
+        isSubKind _ _ = False
 sub (T.KPi (x1, kArg1) kRes1) (T.KPi (x2, kArg2) kRes2) = C.CAnd [sub kArg2 kArg1, sub kRes1 kRes2']
     where
         kRes2' = T.substKind kRes2 x2 x1

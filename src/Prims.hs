@@ -4,9 +4,9 @@ import Types as T
 import qualified Data.Map as Map
 
 constKind :: T.BaseTypes -> T.Rkind
-constKind (T.TRecCons (T.TLabel l) t1 t2) = T.KBase T.BKRec (T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PTBaseTypes (T.TRecCons (T.TLabel l) t1 t2))))
+constKind (T.TRecCons (T.TLabel l) t1 t2) = T.KBase T.BKRec (T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PType (T.TBase (T.TRecCons (T.TLabel l) t1 t2)))))
 constKind (T.PBIn op) = binOpKind op
-constKind t = T.KBase T.BKType (T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PTBaseTypes t)))
+constKind t = T.KBase T.BKType (T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PType (T.TBase t))))
 --constKind (T.PBIn op) = T.KBase T.BKType (T.Refinement ("v", typereft op (T.Pvar "v") (T.PUniterp "PBIn" [T.Pvar "v"])))
 --constKind _ = error "constKind: unsupported base type"
 
