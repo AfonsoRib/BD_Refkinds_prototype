@@ -102,7 +102,7 @@ substPredType (PLab b) _ _ = PLab b
 substPredType (Pvar v) x (TBase bt)
     | v == x    = PTBaseTypes bt
     | otherwise = Pvar v
-substPredType (Pvar v) x _ = Pvar v   -- non-TBase (e.g. TVar) stays as-is
+substPredType (Pvar v) _ _ = Pvar v   -- non-TBase (e.g. TVar) stays as-is
 substPredType (PArrow p1 p2) x t = PArrow (substPredType p1 x t) (substPredType p2 x t)
 substPredType (PInterp op p1 p2) x t = PInterp op (substPredType p1 x t) (substPredType p2 x t)
 substPredType (PAnd p1 p2) x t = PAnd (substPredType p1 x t) (substPredType p2 x t)
@@ -147,3 +147,4 @@ baseTypetoIdentifier (TRecCons (TLabel l) t1 t2) = "{ " ++ l ++ " : " ++ baseTyp
 baseTypetoIdentifier TRecNil = "{}"
 baseTypetoIdentifier (TLabel l) = l
 baseTypetoIdentifier (PBIn op) = show op
+baseTypetoIdentifier (TRecCons l t1 t2) = "{ " ++ baseTypetoIdentifier l ++ " : " ++ baseTypetoIdentifier t1 ++ " | " ++ baseTypetoIdentifier t2 ++ " }"   -- non-label first field

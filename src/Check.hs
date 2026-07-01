@@ -18,10 +18,10 @@ synth env (T.TVar x) =
         Just k -> (C.ctrue, k)
         Nothing -> error $ "synth: unbound variable: " ++ x
 
-synth env (T.TApp e y) = (C.CAnd [c, c'], substKindType k x y)
-    where
-        (c, (T.KPi (x, s) k)) = synth env e
-        c' = check env y s
+synth env (T.TApp e y) = case synth env e of
+    (c, T.KPi (x, s) k) -> (C.CAnd [c, c'], substKindType k x y)
+        where c' = check env y s
+    (_, k) -> error $ "synth: TApp expected a Pi-kind, got: " ++ show k
 
 synth env (T.TAnn t k) = (c, k)
     where c = check env t k
@@ -50,9 +50,6 @@ check env t k =
     where
         (c1, k') = synth env t
         c2 = sub k' k
-
-check _ t k = error $ "check: not implemented for type: " ++ show t ++ " and kind: " ++ show k
-
 
 implicationConstraint :: T.Identifier -> T.Rkind -> C.Cstr -> C.Cstr
 implicationConstraint x k c = case k of

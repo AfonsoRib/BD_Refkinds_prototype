@@ -128,6 +128,8 @@ baseTypeToCVC4 (T.TRecCons (T.TLabel l) t1 t2) = "cons(\"" ++ l ++ "\", " ++ bas
 baseTypeToCVC4 T.TRecNil = "nilrec"
 baseTypeToCVC4 (T.TLabel l) = "\"" ++ l ++ "\""
 baseTypeToCVC4 (T.PBIn _) = error "baseTypeToCVC4: PBIn not expected as a base type"
+baseTypeToCVC4 (T.TRecCons l t1 t2) = "cons(" ++ show (T.baseTypetoIdentifier l) ++ ", " ++ baseTypeToCVC4 t1 ++ ", " ++ baseTypeToCVC4 t2 ++ ")"   -- non-label first field
+
 
 kindToCVC4 :: T.BaseKind -> String
 kindToCVC4 T.BKType = "Typ"
