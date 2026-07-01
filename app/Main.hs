@@ -38,12 +38,18 @@ main = do
     checkConstraint "testLambdaPBInBody" testLambdaPBInBody
     putStrLn "\n--- Outside variables in refinement (using PBIn BEq) ---\n"
     checkConstraint "testLambdaPBInRefOuter" testLambdaPBInRefOuter
+    putStrLn "\n=== Simple Record Self-Equality ===\n"
+    checkConstraint "testSimpleRecEqSelf" testSimpleRecEqSelf
     putStrLn "\n=== Subkind Tests ===\n"
     putStrLn "\n--- BKRec / BKFun <: BKType ---\n"
     checkConstraint "testRecAsBKType" testRecAsBKType
     checkConstraint "testArrowAsBKType" testArrowAsBKType
     checkConstraint "testRecRefinedAsBKType" testRecRefinedAsBKType
     checkConstraint "testLambdaRecAsBKType" testLambdaRecAsBKType
+    putStrLn "\n--- Record outside-var in refinement (like testLambdaPBInRefOuter) ---\n"
+    checkConstraint "testLambdaRecRefOuter" testLambdaRecRefOuter
+    checkConstraint "testLambdaRecRefOuterAsBKType" testLambdaRecRefOuterAsBKType
+    checkConstraint "testLambdaRecNestedRefInner" testLambdaRecNestedRefInner
     putStrLn "\n=== All tests completed ==="
 
 -- ---------------------------------------------------------------------------
@@ -228,6 +234,16 @@ testRecMultiBApart = do
     pure $ Ch.vcgen typeExpr
 
 
+-- | A record {lbl: Int} annotated with a refinement saying v = {lbl: Int}.
+--   The simplest possible record-with-refinement test: the record equals itself.
+testSimpleRecEqSelf :: IO C.Cstr
+testSimpleRecEqSelf = do
+    let rec      = T.TRecCons (T.TLabel "lbl") T.TInt T.TRecNil
+        ref      = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.PTBaseTypes rec))
+        kind     = T.KBase T.BKRec ref
+        typeExpr = T.TAnn (T.TBase rec) kind
+    pure $ Ch.vcgen typeExpr
+
 -- ---------------------------------------------------------------------------
 -- Subkind tests — BKRec, BKFun, BKLabel are subkinds of BKType
 -- ---------------------------------------------------------------------------
@@ -275,6 +291,62 @@ testLambdaRecAsBKType = do
         lam = T.TAnn (T.TLambda (T.LetBind "r") (T.TVar "r"))
                 (T.KPi ("r", argKind) resKind)
     pure $ Ch.vcgen lam
+
+-- ---------------------------------------------------------------------------
+-- Record outside-variable tests — like testLambdaPBInRefOuter but with
+-- record binders (BKRec) and PInterp BEq referencing binder variables.
+-- ---------------------------------------------------------------------------
+
+-- | λr:{x:Int}. r   with result kind: {v:Rec | v = r}
+--
+--   The outer binder "r" (BKRec) appears in the result refinement via
+--   PInterp BEq, mirroring testLambdaPBInRefOuter but with record kinds.
+testLambdaRecRefOuter :: IO C.Cstr
+testLambdaRecRefOuter = do
+    let rec      = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        recKind  = P.constKind rec     -- KBase BKRec {v | v = {x:Int}}
+        resRef   = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.Pvar "r"))
+        resKind  = T.KBase T.BKRec resRef
+        -- λr:{x:Int}. r   with result kind {v:Rec | v = r}
+        lam      = T.TAnn (T.TLambda (T.LetBind "r") (T.TVar "r"))
+                     (T.KPi ("r", recKind) resKind)
+    pure $ Ch.vcgen lam
+
+-- | λr:{x:Int}. r   with result kind: {v:Type | v = r}
+--
+--   Same as testLambdaRecRefOuter but the result kind uses BKType,
+--   exercising both BKRec <: BKType and an outside variable reference.
+testLambdaRecRefOuterAsBKType :: IO C.Cstr
+testLambdaRecRefOuterAsBKType = do
+    let rec      = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        recKind  = P.constKind rec
+        resRef   = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.Pvar "r"))
+        resKind  = T.KBase T.BKType resRef   -- BKType, exercises subkinding
+        lam      = T.TAnn (T.TLambda (T.LetBind "r") (T.TVar "r"))
+                     (T.KPi ("r", recKind) resKind)
+    pure $ Ch.vcgen lam
+
+-- | λr:{x:Int}. λs:{y:Bool}. s   with result kind: {v:Rec | v = s}
+--
+--   Nested record binders. The inner binder "s" appears in the result
+--   refinement via PInterp BEq, similar to the nested structure in
+--   testLambdaPBInRefOuter but with BKRec throughout.
+testLambdaRecNestedRefInner :: IO C.Cstr
+testLambdaRecNestedRefInner = do
+    let rec1     = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        rec2     = T.TRecCons (T.TLabel "y") T.TBool T.TRecNil
+        recKind1 = P.constKind rec1
+        recKind2 = P.constKind rec2
+        -- result refinement: v = s  (s is the inner binder)
+        resRef   = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.Pvar "s"))
+        resKind  = T.KBase T.BKRec resRef
+        -- inner: λs:{y:Bool}. s   with result {v:Rec | v = s}
+        inner    = T.TAnn (T.TLambda (T.LetBind "s") (T.TVar "s"))
+                     (T.KPi ("s", recKind2) resKind)
+        -- outer: λr:{x:Int}. inner
+        outer    = T.TAnn (T.TLambda (T.LetBind "r") inner)
+                     (T.KPi ("r", recKind1) (T.KPi ("s", recKind2) resKind))
+    pure $ Ch.vcgen outer
 
 -- ---------------------------------------------------------------------------
 -- PBIn tests — binary type operations in refinements
