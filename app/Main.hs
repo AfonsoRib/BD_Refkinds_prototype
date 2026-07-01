@@ -38,6 +38,12 @@ main = do
     checkConstraint "testLambdaPBInBody" testLambdaPBInBody
     putStrLn "\n--- Outside variables in refinement (using PBIn BEq) ---\n"
     checkConstraint "testLambdaPBInRefOuter" testLambdaPBInRefOuter
+    putStrLn "\n=== Subkind Tests ===\n"
+    putStrLn "\n--- BKRec / BKFun <: BKType ---\n"
+    checkConstraint "testRecAsBKType" testRecAsBKType
+    checkConstraint "testArrowAsBKType" testArrowAsBKType
+    checkConstraint "testRecRefinedAsBKType" testRecRefinedAsBKType
+    checkConstraint "testLambdaRecAsBKType" testLambdaRecAsBKType
     putStrLn "\n=== All tests completed ==="
 
 -- ---------------------------------------------------------------------------
@@ -221,6 +227,54 @@ testRecMultiBApart = do
         typeExpr = T.TAnn (T.TBase rec1) kind
     pure $ Ch.vcgen typeExpr
 
+
+-- ---------------------------------------------------------------------------
+-- Subkind tests — BKRec, BKFun, BKLabel are subkinds of BKType
+-- ---------------------------------------------------------------------------
+
+-- | A record type {x: Int} annotated with KBase BKType (True).
+--   Tests BKRec <: BKType — a record kind should be accepted where
+--   BKType is expected.
+testRecAsBKType :: IO C.Cstr
+testRecAsBKType = do
+    let rec      = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        typeKind = P.bTrue T.BKType   -- {v:Typ | True}
+        typeExpr = T.TAnn (T.TBase rec) typeKind
+    pure $ Ch.vcgen typeExpr
+
+-- | An arrow type Int → Bool annotated with KBase BKType (True).
+--   Tests BKFun <: BKType — a function kind should be accepted where
+--   BKType is expected.
+testArrowAsBKType :: IO C.Cstr
+testArrowAsBKType = do
+    let arrow    = T.Arrow T.TInt T.TBool
+        typeKind = P.bTrue T.BKType
+        typeExpr = T.TAnn (T.TBase arrow) typeKind
+    pure $ Ch.vcgen typeExpr
+
+-- | A record type {x: Int} annotated with KBase BKType with a refinement
+--   predicate. Tests that the refinement in the BKType target is properly
+--   checked against the synthesized BKRec refinement.
+testRecRefinedAsBKType :: IO C.Cstr
+testRecRefinedAsBKType = do
+    let rec      = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        -- target kind: {v:Typ | v = {x: Int}}   (BKType with a refinement)
+        targetKind = T.KBase T.BKType (T.Refinement ("v",
+            T.PInterp T.BEq (T.Pvar "v") (T.PTBaseTypes rec)))
+        typeExpr = T.TAnn (T.TBase rec) targetKind
+    pure $ Ch.vcgen typeExpr
+
+-- | Lambda λr:{x:Int}. r where the binder's kind is BKRec but the
+--   whole thing is checked against a BKType result.
+--   This exercises BKRec <: BKType inside a Pi-kind context.
+testLambdaRecAsBKType :: IO C.Cstr
+testLambdaRecAsBKType = do
+    let rec      = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        argKind  = P.constKind rec     -- KBase BKRec {v | v = {x:Int}}
+        resKind  = P.bTrue T.BKType    -- KBase BKType {v | True}
+        lam = T.TAnn (T.TLambda (T.LetBind "r") (T.TVar "r"))
+                (T.KPi ("r", argKind) resKind)
+    pure $ Ch.vcgen lam
 
 -- ---------------------------------------------------------------------------
 -- PBIn tests — binary type operations in refinements

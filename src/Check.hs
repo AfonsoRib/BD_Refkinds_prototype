@@ -58,10 +58,11 @@ implicationConstraint x k c = case k of
         
     
 
--- todo other types are a subtype of ktype
+-- | Subkinding: BKRec, BKFun, BKLabel are subkinds of BKType.
+--   Any value of a more specific base kind can be used where BKType is expected.
 sub :: T.Rkind -> T.Rkind -> C.Cstr
 sub (T.KBase b1 (T.Refinement (v1, p1))) (T.KBase b2 (T.Refinement (v2, p2)))
-    | b1 == b2 = C.CAll (C.Bind v1 b1 p1) (C.CPred (T.substPred p2 v2 v1))
+    | b1 == b2 || b2 == T.BKType = C.CAll (C.Bind v1 b1 p1) (C.CPred (T.substPred p2 v2 v1))
     | otherwise = error "sub: base kinds do not match"
 sub (T.KPi (x1, kArg1) kRes1) (T.KPi (x2, kArg2) kRes2) = C.CAnd [sub kArg2 kArg1, sub kRes1 kRes2']
     where
