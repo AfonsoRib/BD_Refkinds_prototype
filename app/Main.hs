@@ -50,6 +50,9 @@ main = do
     checkConstraint "testLambdaRecRefOuter" testLambdaRecRefOuter
     checkConstraint "testLambdaRecRefOuterAsBKType" testLambdaRecRefOuterAsBKType
     checkConstraint "testLambdaRecNestedRefInner" testLambdaRecNestedRefInner
+    putStrLn "\n=== Record Emptiness Tests ===\n"
+    checkConstraint "testRecIsEmpty" testRecIsEmpty
+    checkConstraint "testRecIsNotEmpty" testRecIsNotEmpty
     putStrLn "\n=== All tests completed ==="
 
 -- ---------------------------------------------------------------------------
@@ -419,3 +422,25 @@ testLambdaPBInBody = do
         lam     = T.TAnn (T.TLambda (T.LetBind "x") body)
                     (T.KPi ("x", intKind) resKind)
     pure $ Ch.vcgen lam
+
+-- ---------------------------------------------------------------------------
+-- Record emptiness tests — is_nilrec via PEmpty
+-- ---------------------------------------------------------------------------
+
+-- | Annotate TRecNil with a refinement asserting it IS empty.
+--   Constraint: ∀v. (v = nilrec) ⇒ is_nilrec(v)   — trivially VALID.
+testRecIsEmpty :: IO C.Cstr
+testRecIsEmpty = do
+    let kind = T.KBase T.BKType (T.Refinement ("v", T.PEmpty (T.Pvar "v")))
+        typeExpr = T.TAnn (T.TBase T.TRecNil) kind
+    pure $ Ch.vcgen typeExpr
+
+-- | Annotate {x: Int} with a refinement asserting it is NOT empty.
+--   Constraint: ∀v. (v = cons("x",Num,nilrec)) ⇒ ¬is_nilrec(v) — VALID.
+testRecIsNotEmpty :: IO C.Cstr
+testRecIsNotEmpty = do
+    let rec  = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        kind = T.KBase T.BKType (T.Refinement ("v",
+                T.PNot (T.PEmpty (T.Pvar "v"))))
+        typeExpr = T.TAnn (T.TBase rec) kind
+    pure $ Ch.vcgen typeExpr

@@ -117,6 +117,7 @@ predToCVC4 (T.PInterp op p1 p2) =
 predToCVC4 (T.PAnd p1 p2) = "(" ++ predToCVC4 p1 ++ " AND " ++ predToCVC4 p2 ++ ")"
 predToCVC4 (T.POr p1 p2) = "(" ++ predToCVC4 p1 ++ " OR " ++ predToCVC4 p2 ++ ")"
 predToCVC4 (T.PNot p) = "(NOT " ++ predToCVC4 p ++ ")"
+predToCVC4 (T.PEmpty p) = "is_nilrec(" ++ predToCVC4 p ++ ")"
 -- predToCVC4 (T.PUniterp f ps) = "(" ++ f ++ " " ++ unwords (map predToCVC4 ps) ++ ")" 
 
 baseTypeToCVC4 :: T.BaseTypes -> String

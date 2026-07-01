@@ -17,6 +17,7 @@ data Pred = PTrue
             | PArrow Pred Pred
             | PAnd Pred Pred
             | POr Pred Pred
+            | PEmpty Pred
             | PNot Pred
 --            | PUniterp Identifier [Pred] -- ???
              deriving (Eq, Show)
@@ -79,6 +80,7 @@ substPred (PInterp op p1 p2) x z = PInterp op (substPred p1 x z) (substPred p2 x
 substPred (PAnd p1 p2) x z = PAnd (substPred p1 x z) (substPred p2 x z)
 substPred (POr p1 p2) x z = POr (substPred p1 x z) (substPred p2 x z)
 substPred (PNot p) x z = PNot (substPred p x z)
+substPred (PEmpty p) x z = PEmpty (substPred p x z)
 substPred (PLab b) _ _ = PLab b
 -- substPred (PUniterp f ps) x z = PUniterp f (map (\p -> substPred p x z) ps)
 
@@ -108,6 +110,7 @@ substPredType (PInterp op p1 p2) x t = PInterp op (substPredType p1 x t) (substP
 substPredType (PAnd p1 p2) x t = PAnd (substPredType p1 x t) (substPredType p2 x t)
 substPredType (POr p1 p2) x t = POr (substPredType p1 x t) (substPredType p2 x t)
 substPredType (PNot p) x t = PNot (substPredType p x t)
+substPredType (PEmpty p) x t = PEmpty (substPredType p x t)
 
 substKindType :: Rkind -> Identifier -> Type -> Rkind
 substKindType (KBase b (Refinement (v, p))) x t 
