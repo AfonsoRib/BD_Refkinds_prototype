@@ -22,6 +22,22 @@ main = do
     checkConstraint "testLambdaUnit" testLambdaUnit
     checkConstraint "testLambdaArrow" testLambdaArrow
     checkConstraint "testLambdaTRecCons" testLambdaTRecCons
+    checkConstraint "testIntAnn" testIntAnn
+    putStrLn "\n=== Record BMember / BApart Tests ===\n"
+    checkConstraint "testRecBMember" testRecBMember
+    checkConstraint "testLambdaBMember" testLambdaBMember
+    checkConstraint "testRecBApart" testRecBApart
+    checkConstraint "testRecNotApart" testRecNotApart
+    checkConstraint "testRecMultiBMember" testRecMultiBMember
+    checkConstraint "testRecMultiBApart" testRecMultiBApart
+    putStrLn "\n=== PBIn Tests ===\n"
+    putStrLn "\n--- PBIn applied to concrete types ---\n"
+    checkConstraint "testPBInBEqApplied" testPBInBEqApplied
+    checkConstraint "testPBInBEqAppliedDiff" testPBInBEqAppliedDiff
+    putStrLn "\n--- Lambda body using PBIn ---\n"
+    checkConstraint "testLambdaPBInBody" testLambdaPBInBody
+    putStrLn "\n--- Outside variables in refinement (using PBIn BEq) ---\n"
+    checkConstraint "testLambdaPBInRefOuter" testLambdaPBInRefOuter
     putStrLn "\n=== All tests completed ==="
 
 -- ---------------------------------------------------------------------------
@@ -115,3 +131,165 @@ testLambdaTRecCons = do
     let argKind = P.constKind (T.TRecCons (T.TLabel "label") T.TInt T.TRecNil)
         typeExpr = T.TAnn (T.TLambda (T.LetBind "x") (T.TVar "x")) (T.KPi ("x", argKind) argKind)
     pure $ Ch.vcgen typeExpr
+
+--- test Ann
+
+testIntAnn :: IO C.Cstr
+testIntAnn = do
+    let typeExpr = T.TAnn (T.TBase T.TInt) (P.constKind T.TInt)
+    pure $ Ch.vcgen typeExpr
+
+-- ---------------------------------------------------------------------------
+-- BMember / BApart tests via type expressions (through vcgen)
+-- ---------------------------------------------------------------------------
+
+-- | Annotate {x: Int} with a kind asserting "x" is a label in it.
+--   vcgen produces:
+--     FORALL (v : Typ): (v = cons("x", Num, nilrec) => "x" IS_IN lab(cons("x", Num, nilrec)))
+testRecBMember :: IO C.Cstr
+testRecBMember = do
+    let rec = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        kind = T.KBase T.BKRec (T.Refinement ("v",
+            T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "x")) (T.PLab rec)))
+        typeExpr = T.TAnn (T.TBase rec) kind
+    pure $ Ch.vcgen typeExpr
+
+-- | Lambda λr: {x: Int | "x" ∈ lab(r)}. r
+--   The argument kind refines the record binder with a BMember predicate.
+testLambdaBMember :: IO C.Cstr
+testLambdaBMember = do
+    let rec = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        argKind = T.KBase T.BKRec (T.Refinement ("v",
+            T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "x")) (T.PLab rec)))
+        typeExpr = T.TAnn (T.TLambda (T.LetBind "r") (T.TVar "r"))
+                    (T.KPi ("r", argKind) argKind)
+    pure $ Ch.vcgen typeExpr
+
+-- | Annotate {x: Int} with a kind asserting it is apart from {y: Bool}.
+--   vcgen produces:
+--     FORALL (v : Typ): (v = cons("x", Num, nilrec) =>
+--       apartl(lab(cons("x", Num, nilrec)), lab(cons("y", Bool, nilrec))))
+testRecBApart :: IO C.Cstr
+testRecBApart = do
+    let rec1 = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        rec2 = T.TRecCons (T.TLabel "y") T.TBool T.TRecNil
+        kind = T.KBase T.BKRec (T.Refinement ("v",
+            T.PInterp T.BApart (T.PLab rec1) (T.PLab rec2)))
+        typeExpr = T.TAnn (T.TBase rec1) kind
+    pure $ Ch.vcgen typeExpr
+
+-- | Annotate {x: Int} with a kind asserting it is NOT apart from {x: Bool}.
+--   vcgen produces:
+--     FORALL (v : Typ): (v = cons("x", Num, nilrec) =>
+--       NOT apartl(lab(cons("x", Num, nilrec)), lab(cons("x", Bool, nilrec))))
+testRecNotApart :: IO C.Cstr
+testRecNotApart = do
+    let rec1 = T.TRecCons (T.TLabel "x") T.TInt T.TRecNil
+        rec2 = T.TRecCons (T.TLabel "x") T.TBool T.TRecNil
+        kind = T.KBase T.BKRec (T.Refinement ("v",
+            T.PNot (T.PInterp T.BApart (T.PLab rec1) (T.PLab rec2))))
+        typeExpr = T.TAnn (T.TBase rec1) kind
+    pure $ Ch.vcgen typeExpr
+
+-- | Annotate {x: Int, y: Bool} with a kind asserting both labels are members.
+--   vcgen produces:
+--     FORALL (v : Typ): (v = cons("x", Num, cons("y", Bool, nilrec)) =>
+--       ("x" IS_IN lab(...) AND "y" IS_IN lab(...) AND TRUE))
+testRecMultiBMember :: IO C.Cstr
+testRecMultiBMember = do
+    let rec = T.TRecCons (T.TLabel "x") T.TInt
+                (T.TRecCons (T.TLabel "y") T.TBool T.TRecNil)
+        p1 = T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "x")) (T.PLab rec)
+        p2 = T.PInterp T.BMember (T.PTBaseTypes (T.TLabel "y")) (T.PLab rec)
+        kind = T.KBase T.BKRec (T.Refinement ("v",
+            T.PAnd p1 p2))
+        typeExpr = T.TAnn (T.TBase rec) kind
+    pure $ Ch.vcgen typeExpr
+
+-- | Annotate {x: Int, y: Bool} with a kind asserting it is apart from {z: Unit}.
+--   vcgen produces:
+--     FORALL (v : Typ): (v = cons("x", Num, cons("y", Bool, nilrec)) =>
+--       apartl(lab(cons("x", Num, cons("y", Bool, nilrec))),
+--              lab(cons("z", Unit, nilrec))))
+testRecMultiBApart :: IO C.Cstr
+testRecMultiBApart = do
+    let rec1 = T.TRecCons (T.TLabel "x") T.TInt
+                (T.TRecCons (T.TLabel "y") T.TBool T.TRecNil)
+        rec2 = T.TRecCons (T.TLabel "z") T.TUnit T.TRecNil
+        kind = T.KBase T.BKRec (T.Refinement ("v",
+            T.PInterp T.BApart (T.PLab rec1) (T.PLab rec2)))
+        typeExpr = T.TAnn (T.TBase rec1) kind
+    pure $ Ch.vcgen typeExpr
+
+
+-- ---------------------------------------------------------------------------
+-- PBIn tests — binary type operations in refinements
+-- ---------------------------------------------------------------------------
+
+-- | Apply PBIn BEq to TInt and TInt, producing a type whose refinement
+--   says the two arguments are equal (int = int, trivially true).
+--
+--   This tests that constKind dispatches correctly to binOpKind for PBIn,
+--   and that application substitutes the Pi-kind binders into the refinement.
+testPBInBEqApplied :: IO C.Cstr
+testPBInBEqApplied = do
+    let pbin    = T.TBase (T.PBIn T.BEq)
+        applied = T.TApp (T.TApp pbin (T.TBase T.TInt)) (T.TBase T.TInt)
+        resultKind = P.bTrue T.BKType
+        typeExpr   = T.TAnn applied resultKind
+    pure $ Ch.vcgen typeExpr
+
+-- | Apply PBIn BEq to TInt and TBool (different types).
+--   The refinement will say int = bool, which is false — but the constraint
+--   should still be well-formed. Tests that substitution works across
+--   different base types via PBIn.
+testPBInBEqAppliedDiff :: IO C.Cstr
+testPBInBEqAppliedDiff = do
+    let pbin    = T.TBase (T.PBIn T.BEq)
+        applied = T.TApp (T.TApp pbin (T.TBase T.TInt)) (T.TBase T.TBool)
+        resultKind = P.bTrue T.BKType
+        typeExpr   = T.TAnn applied resultKind
+    pure $ Ch.vcgen typeExpr
+
+-- | Lambda where the *result refinement* references the outer binder using
+--   PBIn BEq. Tests "outside variables inside the refinement using PBIn".
+--
+--   λx:Int. λy:Int. y   with result kind: {v:Type | v = x}
+--
+--   The refinement predicate PInterp BEq (Pvar "v") (Pvar "x") uses the
+--   PBIn-linked operator BEq and references "x" — a variable bound by the
+--   outer lambda. The implicationConstraint mechanism introduces a FORALL
+--   for each binder, so "x" should be in scope.
+testLambdaPBInRefOuter :: IO C.Cstr
+testLambdaPBInRefOuter = do
+    let intKind = P.constKind T.TInt
+        -- result refinement: v = x   (using PBIn BEq operator)
+        resRef  = T.Refinement ("v", T.PInterp T.BEq (T.Pvar "v") (T.Pvar "x"))
+        resKind = T.KBase T.BKType resRef
+        -- inner: λy:Int. y   with result kind {v:Type | v = x}
+        inner   = T.TAnn (T.TLambda (T.LetBind "y") (T.TVar "y"))
+                    (T.KPi ("y", intKind) resKind)
+        -- outer: λx:Int. inner
+        outer   = T.TAnn (T.TLambda (T.LetBind "x") inner)
+                    (T.KPi ("x", intKind) (T.KPi ("y", intKind) resKind))
+    pure $ Ch.vcgen outer
+
+
+
+-- | Lambda whose body is a PBIn BEq application inside a lambda binder.
+--
+--   λx:Int. (PBIn BEq) Int Int
+--
+--   Tests that a fully-applied PBIn term works as the body of a lambda,
+--   where the lambda binder "x" is in scope (though not referenced in this
+--   particular refinement — the refinement after substitution says int = int).
+testLambdaPBInBody :: IO C.Cstr
+testLambdaPBInBody = do
+    let intKind = P.constKind T.TInt
+        pbin    = T.TBase (T.PBIn T.BEq)
+        body    = T.TApp (T.TApp pbin (T.TBase T.TInt)) (T.TBase T.TInt)
+        resKind = P.bTrue T.BKType
+        -- λx:Int. (PBIn BEq Int Int)  with result kind {v:Typ | True}
+        lam     = T.TAnn (T.TLambda (T.LetBind "x") body)
+                    (T.KPi ("x", intKind) resKind)
+    pure $ Ch.vcgen lam

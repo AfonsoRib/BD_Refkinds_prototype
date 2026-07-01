@@ -107,14 +107,17 @@ predToCVC4 :: T.Pred -> String
 predToCVC4 T.PTrue = "TRUE"
 predToCVC4 T.PFalse = "FALSE"
 predToCVC4 (T.PTBaseTypes b) = baseTypeToCVC4 b
+predToCVC4 (T.PLab b) = "lab(" ++ baseTypeToCVC4 b ++ ")"
 predToCVC4 (T.Pvar v) = v
 predToCVC4 (T.PArrow p1 p2) = "(" ++ predToCVC4 p1 ++ " => " ++ predToCVC4 p2 ++ ")"
+predToCVC4 (T.PInterp T.BApart p1 p2) =
+  "apartl(" ++ predToCVC4 p1 ++ ", " ++ predToCVC4 p2 ++ ")"
 predToCVC4 (T.PInterp op p1 p2) =
   "(" ++ predToCVC4 p1 ++ " " ++ typeOpToCVC4 op ++ " " ++ predToCVC4 p2 ++ ")"
 predToCVC4 (T.PAnd p1 p2) = "(" ++ predToCVC4 p1 ++ " AND " ++ predToCVC4 p2 ++ ")"
 predToCVC4 (T.POr p1 p2) = "(" ++ predToCVC4 p1 ++ " OR " ++ predToCVC4 p2 ++ ")"
 predToCVC4 (T.PNot p) = "(NOT " ++ predToCVC4 p ++ ")"
-predToCVC4 (T.PUniterp f ps) = "(" ++ f ++ " " ++ unwords (map predToCVC4 ps) ++ ")" 
+-- predToCVC4 (T.PUniterp f ps) = "(" ++ f ++ " " ++ unwords (map predToCVC4 ps) ++ ")" 
 
 baseTypeToCVC4 :: T.BaseTypes -> String
 baseTypeToCVC4 T.TUnit = "Unit"

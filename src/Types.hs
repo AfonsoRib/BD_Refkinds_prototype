@@ -12,12 +12,13 @@ data Pred = PTrue
             | PFalse
             | Pvar Identifier
             | PInterp TypeOp Pred Pred
-            | PTBaseTypes BaseTypes
+            | PTBaseTypes BaseTypes -- TODO change to types later?
+            | PLab BaseTypes        -- lab() for record label sets
             | PArrow Pred Pred
             | PAnd Pred Pred
             | POr Pred Pred
             | PNot Pred
-            | PUniterp Identifier [Pred] -- ???
+--            | PUniterp Identifier [Pred] -- ???
              deriving (Eq, Show)
 
 data BaseKind = BKType | BKRec | BKFun | BKLabel
@@ -45,7 +46,7 @@ data BaseTypes = TUnit
   deriving (Eq, Show)
 
 data TypeOp = BEq | BAnd | BOr | BMember | BApart
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 data LetBind = LetBind !Identifier deriving (Eq, Show)
 data Type
@@ -78,7 +79,8 @@ substPred (PInterp op p1 p2) x z = PInterp op (substPred p1 x z) (substPred p2 x
 substPred (PAnd p1 p2) x z = PAnd (substPred p1 x z) (substPred p2 x z)
 substPred (POr p1 p2) x z = POr (substPred p1 x z) (substPred p2 x z)
 substPred (PNot p) x z = PNot (substPred p x z)
-substPred (PUniterp f ps) x z = PUniterp f (map (\p -> substPred p x z) ps)
+substPred (PLab b) _ _ = PLab b
+-- substPred (PUniterp f ps) x z = PUniterp f (map (\p -> substPred p x z) ps)
 
 substKind :: Rkind -> Identifier -> Identifier -> Rkind
 substKind (KBase b (Refinement (v, p))) x z 
@@ -88,11 +90,29 @@ substKind (KPi (v, k1) k2) x z
     | v == x    = KPi (v, substKind k1 x z) k2
     | otherwise = KPi (v, substKind k1 x z) (substKind k2 x z)
 
+-- TODO check if this is correct. slop
+
+-- | Substitute a Type for an Identifier in a Pred, converting concrete
+--   base types to PTBaseTypes so the CVC4 output is correct.
+substPredType :: Pred -> Identifier -> Type -> Pred
+substPredType PTrue _ _ = PTrue
+substPredType PFalse _ _ = PFalse
+substPredType (PTBaseTypes b) _ _ = PTBaseTypes b
+substPredType (PLab b) _ _ = PLab b
+substPredType (Pvar v) x (TBase bt)
+    | v == x    = PTBaseTypes bt
+    | otherwise = Pvar v
+substPredType (Pvar v) x _ = Pvar v   -- non-TBase (e.g. TVar) stays as-is
+substPredType (PArrow p1 p2) x t = PArrow (substPredType p1 x t) (substPredType p2 x t)
+substPredType (PInterp op p1 p2) x t = PInterp op (substPredType p1 x t) (substPredType p2 x t)
+substPredType (PAnd p1 p2) x t = PAnd (substPredType p1 x t) (substPredType p2 x t)
+substPredType (POr p1 p2) x t = POr (substPredType p1 x t) (substPredType p2 x t)
+substPredType (PNot p) x t = PNot (substPredType p x t)
 
 substKindType :: Rkind -> Identifier -> Type -> Rkind
 substKindType (KBase b (Refinement (v, p))) x t 
     | v == x    = KBase b (Refinement (v, p))
-    | otherwise = KBase b (Refinement (v, substPred p x (typeToIdentifier t)))
+    | otherwise = KBase b (Refinement (v, substPredType p x t))
 substKindType (KPi (v, k1) k2) x t
     | v == x    = KPi (v, substKindType k1 x t) k2
     | otherwise = KPi (v, substKindType k1 x t) (substKindType k2 x t)
